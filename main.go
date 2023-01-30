@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -30,9 +31,13 @@ func init() {
 }
 
 type OIDCDiscovery struct {
-	Issuer        string `json:"issuer"`
-	TokenEndpoint string `json:"token_endpoint"`
-	JWKSURI       string `json:"jwks_uri"`
+	Issuer                 string                    `json:"issuer"`
+	TokenEndpoint          string                    `json:"token_endpoint"`
+	JWKSURI                string                    `json:"jwks_uri"`
+	SupportedAlgorithms    []jose.SignatureAlgorithm `json:"id_token_signing_alg_values_supported,omitempty"`
+	ClaimsSupported        []string                  `json:"claims_supported,omitempty"`
+	ResponseTypesSupported []string                  `json:"response_types_supported,omitempty"`
+	SubjectTypesSupported  []string                  `json:"subject_types_supported,omitempty"`
 }
 
 func NewOIDCDiscovery(iss string) OIDCDiscovery {
@@ -46,9 +51,19 @@ func NewOIDCDiscovery(iss string) OIDCDiscovery {
 	}
 
 	return OIDCDiscovery{
-		Issuer:        iss,
-		TokenEndpoint: te,
-		JWKSURI:       ju,
+		Issuer:                 iss,
+		TokenEndpoint:          te,
+		JWKSURI:                ju,
+		SupportedAlgorithms:    []jose.SignatureAlgorithm{jose.RS256},
+		ResponseTypesSupported: []string{"id_token"},
+		SubjectTypesSupported:  []string{"public"},
+		ClaimsSupported: []string{
+			"aud",
+			"exp",
+			"iat",
+			"iss",
+			"sub",
+		},
 	}
 }
 
@@ -73,16 +88,17 @@ func main() {
 		log.Fatalf("error generating key: %w", err)
 	}
 
+	kid := uuid.New().String()
 	jwk := jose.JSONWebKey{
 		Algorithm: string(jose.RS256),
 		Key:       pk,
-		KeyID:     uuid.New().String(),
+		KeyID:     kid,
 	}
 
 	signer, err := jose.NewSigner(jose.SigningKey{
 		Algorithm: jose.RS256,
 		Key:       jwk.Key,
-	}, nil)
+	}, &jose.SignerOptions{ExtraHeaders: map[jose.HeaderKey]interface{}{"kid": kid}})
 	if err != nil {
 		log.Fatalf("error creating signer: %w", err)
 	}
@@ -91,8 +107,6 @@ func main() {
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-
-		log.Infof("HEADERS: %+v", r.Header)
 
 		fmt.Fprintf(w, `checkout the following:
 		<br>
@@ -149,7 +163,8 @@ func main() {
 		if debug == "true" {
 			parts := strings.Split(tok, ".")
 			if len(parts) != 3 {
-				log.Errorf("error debug decoding token: %w", err)
+				err = errors.New("error debug decoding token")
+				log.Error(err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
