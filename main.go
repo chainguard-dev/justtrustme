@@ -56,11 +56,13 @@ type TokenResponse struct {
 	Token string `json:"token"`
 }
 
+func issuer(r *http.Request) string {
+	// For whatever reason, Cloud Run is not setting the Host header,
+	// so we need this until b/267200341 is fixed.
+	return os.Getenv("ISSUER_URL")
+}
+
 func main() {
-	issuerURL := os.Getenv("ISSUER_URL")
-	if issuerURL == "" {
-		log.Fatal("ISSUER_URL must be set")
-	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -87,30 +89,32 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	help := fmt.Sprintf(`checkout the following:
-	<br>
-	<a href="%s">%s</a>
-	<br>
-	<a href="%s">%s</a>
-	<br>
-	<a href="%s">%s</a>
-	<br>
-	<a href="%s">%s</a>
-	<br>
-	<a href="%s">%s</a>
-	<br>
-	<a href="%s">%s</a>
-	`,
-		issuerURL+"/token", issuerURL+"/token",
-		issuerURL+"/token?debug=true", issuerURL+"/token?debug=true",
-		issuerURL+"/token?aud=sts.amazonaws.com&likes_dogs=true", issuerURL+"/token?aud=sts.amazonaws.com&likes_dogs=true",
-		issuerURL+"/keys", issuerURL+"/keys",
-		issuerURL+"/.well-known/openid-configuration", issuerURL+"/.well-known/openid-configuration",
-		"https://github.com/chainguard-dev/justtrustme", "https://github.com/chainguard-dev/justtrustme",
-	)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, help)
+
+		log.Infof("HEADERS: %+v", r.Header)
+
+		fmt.Fprintf(w, `checkout the following:
+		<br>
+		<a href="%s">%s</a>
+		<br>
+		<a href="%s">%s</a>
+		<br>
+		<a href="%s">%s</a>
+		<br>
+		<a href="%s">%s</a>
+		<br>
+		<a href="%s">%s</a>
+		<br>
+		<a href="%s">%s</a>
+		`,
+			issuer(r)+"/token", issuer(r)+"/token",
+			issuer(r)+"/token?debug=true", issuer(r)+"/token?debug=true",
+			issuer(r)+"/token?aud=sts.amazonaws.com&likes_dogs=true", issuer(r)+"/token?aud=sts.amazonaws.com&likes_dogs=true",
+			issuer(r)+"/keys", issuer(r)+"/keys",
+			issuer(r)+"/.well-known/openid-configuration", issuer(r)+"/.well-known/openid-configuration",
+			"https://github.com/chainguard-dev/justtrustme", "https://github.com/chainguard-dev/justtrustme",
+		)
 	})
 
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +136,7 @@ func main() {
 		}
 		now := time.Now()
 		tok, err := jwt.Signed(signer).Claims(jwt.Claims{
-			Issuer:   issuerURL,
+			Issuer:   issuer(r),
 			IssuedAt: jwt.NewNumericDate(now),
 			Expiry:   jwt.NewNumericDate(now.Add(30 * time.Minute)),
 		}).Claims(claims).CompactSerialize()
@@ -171,7 +175,7 @@ func main() {
 	})
 
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewEncoder(w).Encode(NewOIDCDiscovery(issuerURL)); err != nil {
+		if err := json.NewEncoder(w).Encode(NewOIDCDiscovery(issuer(r))); err != nil {
 			log.Errorf("error encoding response: %w", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
