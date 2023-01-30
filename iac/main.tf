@@ -46,8 +46,8 @@ resource "google_cloud_run_service" "issuer" {
   template {
     metadata {
       annotations = {
-        "autoscaling.knative.dev/minScale": "1"
-        "autoscaling.knative.dev/maxScale": "1"
+        "autoscaling.knative.dev/minScale" : "1"
+        "autoscaling.knative.dev/maxScale" : "1"
       }
     }
     spec {
@@ -55,9 +55,9 @@ resource "google_cloud_run_service" "issuer" {
       containers {
         image = ko_image.image.image_ref
         env {
-          name  = "ISSUER_URL"
+          name = "ISSUER_URL"
           # Until b/267200341 is fixed, we need this... :(
-          value = "https://just-trust-me-gdklsulytq-uw.a.run.app"
+          value = "https://justtrustme.dev"
         }
       }
     }
