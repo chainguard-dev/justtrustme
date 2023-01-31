@@ -168,24 +168,39 @@ func main() {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			for _, part := range parts[:2] {
-				s, err := base64.RawStdEncoding.DecodeString(part)
-				if err != nil {
-					log.Errorf("error debug decoding token: %w", err)
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				buf := bytes.NewBuffer([]byte{})
-				json.Indent(buf, s, "", "\t")
-				fmt.Fprintln(w, buf)
-				fmt.Fprintln(w)
-			}
-			fmt.Fprint(w, parts[2])
-		} else {
-			if err := json.NewEncoder(w).Encode(TokenResponse{tok}); err != nil {
-				log.Errorf("error encoding response: %w", err)
+
+			d := make(map[string]interface{})
+			p1, err := base64.RawStdEncoding.DecodeString(parts[0])
+			if err != nil {
+				log.Errorf("error debug decoding token: %w", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
+			var pj1 map[string]interface{}
+			json.NewDecoder(bytes.NewReader(p1)).Decode(&pj1)
+			d["header"] = pj1
+
+			p2, err := base64.RawStdEncoding.DecodeString(parts[1])
+			if err != nil {
+				log.Errorf("error debug decoding token: %w", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			var pj2 map[string]interface{}
+			json.NewDecoder(bytes.NewReader(p2)).Decode(&pj2)
+			d["payload"] = pj2
+
+			d["signature"] = parts[2]
+
+			buf := bytes.NewBuffer([]byte{})
+			je := json.NewEncoder(buf)
+			je.SetIndent("", "\t")
+			je.Encode(&d)
+			fmt.Fprintln(w, buf)
+		}
+		if err := json.NewEncoder(w).Encode(TokenResponse{tok}); err != nil {
+			log.Errorf("error encoding response: %w", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
