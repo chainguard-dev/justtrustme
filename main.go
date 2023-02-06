@@ -72,9 +72,7 @@ type TokenResponse struct {
 }
 
 func issuer(r *http.Request) string {
-	// For whatever reason, Cloud Run is not setting the Host header,
-	// so we need this until b/267200341 is fixed.
-	return os.Getenv("ISSUER_URL")
+	return fmt.Sprintf("https://%s", r.Host)
 }
 
 func main() {

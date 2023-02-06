@@ -54,11 +54,6 @@ resource "google_cloud_run_service" "issuer" {
       service_account_name = google_service_account.issuer.email
       containers {
         image = ko_image.image.image_ref
-        env {
-          name = "ISSUER_URL"
-          # Until b/267200341 is fixed, we need this... :(
-          value = "https://justtrustme.dev"
-        }
       }
     }
   }
