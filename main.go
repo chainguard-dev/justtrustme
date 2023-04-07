@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -119,10 +120,13 @@ func main() {
 		<a href="%s">%s</a>
 		<br>
 		<a href="%s">%s</a>
+		<br>
+		<a href="%s">%s</a>
 		`,
 			issuer(r)+"/token", issuer(r)+"/token",
 			issuer(r)+"/token?debug=true", issuer(r)+"/token?debug=true",
 			issuer(r)+"/token?aud=sts.amazonaws.com&likes_dogs=true", issuer(r)+"/token?aud=sts.amazonaws.com&likes_dogs=true",
+			issuer(r)+"/token?foo=bar&MAP:embedded=key1=value1,key2=value2&debug=true", issuer(r)+"/token?foo=bar&MAP:embedded=key1=value1,key2=value2&debug=true",
 			issuer(r)+"/keys", issuer(r)+"/keys",
 			issuer(r)+"/.well-known/openid-configuration", issuer(r)+"/.well-known/openid-configuration",
 			"https://github.com/chainguard-dev/justtrustme", "https://github.com/chainguard-dev/justtrustme",
@@ -143,7 +147,49 @@ func main() {
 			} else if s == "false" {
 				claims[k] = false
 			} else {
-				claims[k] = s
+				// If the value is prefixed with MAP:, then pull that apart
+				// from it. This is meant to provide embedded map=>key1=val1, so
+				// that we can encode extra information. For example, to
+				// represent something like this:
+				// "payload": {
+				//   "foo": "bar",
+				//   "embedded": {
+				//     "key1": "value1",
+				//     "key2": "value2",
+				//   }
+				// }
+				// You would encode it like so:
+				// /token?foo=bar&MAP:embedded=key1=value1,key2=value2
+				if strings.HasPrefix(k, "MAP:") {
+					mapKey := strings.TrimPrefix(k, "MAP:")
+					val, ok := claims[mapKey]
+					if !ok {
+						claims[mapKey] = make(map[string]string, 0)
+						val = claims[mapKey]
+					}
+					// Just make sure it's a map
+					if reflect.ValueOf(val).Kind() != reflect.Map {
+						errStr := fmt.Sprintf("Malformed value %s is both map key and value", val)
+						log.Warn(errStr)
+						http.Error(w, errStr, http.StatusBadRequest)
+						return
+					}
+					// Split the value on , to get key/value pairs split by '='
+					// and put them into the map
+					embedValues := strings.Split(s, ",")
+					for _, embedValue := range embedValues {
+						pieces := strings.Split(embedValue, "=")
+						if len(pieces) != 2 {
+							errStr := fmt.Sprintf("Malformed value %s is missing = separator between key/value", embedValue)
+							log.Warn(errStr)
+							http.Error(w, errStr, http.StatusBadRequest)
+							return
+						}
+						val.(map[string]string)[pieces[0]] = pieces[1]
+					}
+				} else {
+					claims[k] = s
+				}
 			}
 		}
 		now := time.Now()
