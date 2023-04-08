@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -133,6 +134,24 @@ func main() {
 		query := r.URL.Query()
 		debug := query.Get("debug")
 		claims := make(map[string]interface{})
+
+		// This is fine even if there's no to body sent.
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Errorf("error reading body: %w", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if len(body) > 0 {
+			err = json.Unmarshal(body, &claims)
+			if err != nil {
+				log.Errorf("error unmarshaling: %w", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
 		for k, v := range query {
 			if k == "debug" {
 				continue
