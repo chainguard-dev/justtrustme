@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -136,7 +136,7 @@ func main() {
 		claims := make(map[string]interface{})
 
 		// This is fine even if there's no to body sent.
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			log.Errorf("error reading body: %w", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -194,7 +194,10 @@ func main() {
 				return
 			}
 			var pj1 map[string]interface{}
-			json.NewDecoder(bytes.NewReader(p1)).Decode(&pj1)
+			if err := json.NewDecoder(bytes.NewReader(p1)).Decode(&pj1); err != nil {
+				log.Error(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			d["header"] = pj1
 
 			p2, err := base64.RawStdEncoding.DecodeString(parts[1])
@@ -204,7 +207,10 @@ func main() {
 				return
 			}
 			var pj2 map[string]interface{}
-			json.NewDecoder(bytes.NewReader(p2)).Decode(&pj2)
+			if err := json.NewDecoder(bytes.NewReader(p2)).Decode(&pj2); err != nil {
+				log.Error(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			d["payload"] = pj2
 
 			d["signature"] = parts[2]
@@ -212,7 +218,10 @@ func main() {
 			buf := bytes.NewBuffer([]byte{})
 			je := json.NewEncoder(buf)
 			je.SetIndent("", "\t")
-			je.Encode(&d)
+			if err := je.Encode(&d); err != nil {
+				log.Error(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			fmt.Fprintln(w, buf)
 		}
 		if err := json.NewEncoder(w).Encode(TokenResponse{tok}); err != nil {
