@@ -107,7 +107,7 @@ func main() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 
-		fmt.Fprintf(w, `checkout the following:
+		_, _ = fmt.Fprintf(w, `checkout the following:
 		<br>
 		<a href="%s">%s</a>
 		<br>
@@ -157,11 +157,12 @@ func main() {
 				continue
 			}
 			s := v[0]
-			if s == "true" {
+			switch s {
+			case "true":
 				claims[k] = true
-			} else if s == "false" {
+			case "false":
 				claims[k] = false
-			} else {
+			default:
 				claims[k] = s
 			}
 		}
@@ -222,7 +223,7 @@ func main() {
 				log.Error(err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
-			fmt.Fprintln(w, buf)
+			_, _ = fmt.Fprintln(w, buf)
 		}
 		if err := json.NewEncoder(w).Encode(TokenResponse{tok}); err != nil {
 			log.Errorf("error encoding response: %w", err)
